@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "어질러진 방",
+    "slug": "messy-room",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png",
+      "name": "어질러진 방",
+      "shortName": "어질러진 방",
+      "themeColor": "#7a4a26",
+      "backgroundColor": "#e9c99b"
+    },
+    "scheme": "messyroom",
+    "plugins": [
+      "expo-router",
+      "expo-sqlite"
+    ]
+  }
+}
