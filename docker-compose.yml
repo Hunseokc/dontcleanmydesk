@@ -1,0 +1,11 @@
+services:
+  server:
+    build: ./server
+    ports: ["8787:8787"]
+    volumes: ["room-data:/data"]
+  web:
+    build: ./app
+    ports: ["8081:80"]
+    depends_on: [server]
+volumes:
+  room-data:
