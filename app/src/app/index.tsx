@@ -1,18 +1,23 @@
-// 첫 화면: 위에는 통, 아래 절반 이상은 바로 쓸 수 있는 입력 공간.
-import { useLocalSearchParams, useRouter } from 'expo-router';
+// 첫 화면: 위에는 정면에서 본 얕은 서랍 한 칸, 넉넉한 간격 아래로 메모 목록.
+// 책상을 그리지 않고 배경색과 간격만으로 서랍과 작업 공간을 나눈다.
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutRectangle } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Bin } from '@/collect/Bin';
 import { Composer } from '@/collect/Composer';
+import { Drawer, slitY } from '@/collect/Drawer';
 import { FlyingPaper } from '@/collect/FlyingPaper';
+import { MemoCard } from '@/collect/MemoCard';
 import { saveIdea, type Attachment } from '@/collect/save';
 import { useWebDropAndPaste } from '@/collect/webCollect';
 import type { Item } from '@/core/types';
 import { sfx } from '@/fx/sfx';
-import { store, useStore } from '@/store/store';
+import { useStore } from '@/store/store';
 import { themeById } from '@/themes';
+import { ItemDetail } from '@/ui/ItemDetail';
+
+const MAX_W = 560;
 
 export default function CollectScreen() {
   const router = useRouter();
@@ -21,25 +26,33 @@ export default function CollectScreen() {
   // 북마클릿·PWA 공유 대상(share_target)으로 들어온 값
   const params = useLocalSearchParams<{ url?: string; text?: string; title?: string }>();
   const bin = useStore((s) => s.currentBin());
-  const bins = useStore((s) => s.liveBins());
   const items = useStore((s) => s.binItems(bin.id));
   const theme = themeById(bin.themeId);
   const ui = theme.ui;
 
   const [text, setText] = useState(() => params.url || [params.title, params.text].filter(Boolean).join('\n'));
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [composing, setComposing] = useState(() => !!text);
   const [flights, setFlights] = useState<Item[]>([]);
   const [pending, setPending] = useState<Set<string>>(new Set());
-  const [binBox, setBinBox] = useState<LayoutRectangle | null>(null);
-  const [composerBox, setComposerBox] = useState<LayoutRectangle | null>(null);
-  const [menu, setMenu] = useState(false);
+  const [landedCount, setLandedCount] = useState(0);
+  const [pouring, setPouring] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const composerRef = useRef<React.ComponentRef<typeof View>>(null);
+  const [composerBox, setComposerBox] = useState<{ x: number; y: number } | null>(null);
   // 키보드 단축키 리스너가 오래된 렌더의 값을 붙잡지 않도록 항상 최신 입력을 읽는다
   const latest = useRef({ text, attachments });
   useLayoutEffect(() => {
     latest.current = { text, attachments };
   });
 
-  const onAttach = useCallback((a: Attachment[]) => setAttachments((cur) => [...cur, ...a]), []);
+  // 책상에서 돌아오면 서랍은 닫혀 있어야 한다
+  useFocusEffect(useCallback(() => setPouring(false), []));
+
+  const onAttach = useCallback((a: Attachment[]) => {
+    setAttachments((cur) => [...cur, ...a]);
+    setComposing(true);
+  }, []);
 
   const submit = useCallback(async () => {
     const { text: t, attachments: a } = latest.current;
@@ -67,6 +80,7 @@ export default function CollectScreen() {
 
   const landed = useCallback((id: string) => {
     sfx.thud();
+    setLandedCount((n) => n + 1);
     setFlights((f) => f.filter((i) => i.id !== id));
     setPending((p) => {
       const n = new Set(p);
@@ -75,54 +89,73 @@ export default function CollectScreen() {
     });
   }, []);
 
-  const binAreaH = height * 0.4;
-  const binW = Math.min(340, width * 0.7);
-  const binH = Math.min(binAreaH * 0.66, binW * 0.72);
+  const pour = () => {
+    setComposing(false);
+    setPouring(true);
+  };
+
+  const contentW = Math.min(width, MAX_W);
+  // 서랍은 화면 위쪽 약 20%
+  const drawerH = insets.top + Math.max(110, Math.min(190, height * 0.2));
+  const shown = items.filter((i) => !pending.has(i.id));
 
   return (
-    <View style={[styles.root, { backgroundColor: ui.background }]}>
-      <View style={[styles.top, { paddingTop: insets.top + 10, height: binAreaH + insets.top }]}>
-        <View style={styles.bar}>
-          <Pressable onPress={() => setMenu((m) => !m)} style={styles.binName}>
-            <Text style={[styles.binText, { color: ui.ink }]}>{bin.name} ▾</Text>
-          </Pressable>
-          <View style={{ flex: 1 }} />
-          <Pressable onPress={() => router.push('/list')} style={styles.barBtn}>
-            <Text style={{ color: ui.ink }}>순서 보기</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push('/settings')} style={styles.barBtn}>
-            <Text style={{ color: ui.ink }}>설정</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.binWrap} onLayout={(e) => setBinBox(e.nativeEvent.layout)}>
-          <Bin width={binW} height={binH} items={items} pending={pending} theme={theme} onOpen={() => router.push('/desk')} />
-          <Text style={[styles.binHint, { color: ui.inkSoft }]}>{items.length}개 · 눌러서 펼치기 · 아래로 끌어 엎기</Text>
-        </View>
-
-        {menu ? (
-          <View style={[styles.menu, { backgroundColor: ui.panel, top: insets.top + 48 }]}>
-            {bins.map((b) => (
-              <Pressable key={b.id} onPress={() => { store.setCurrentBin(b.id); setMenu(false); }} style={styles.menuItem}>
-                <Text style={{ color: ui.ink, fontWeight: b.id === bin.id ? '700' : '400' }}>{b.name}</Text>
-              </Pressable>
-            ))}
-            <Pressable onPress={() => { setMenu(false); router.push('/settings'); }} style={styles.menuItem}>
-              <Text style={{ color: ui.accent }}>+ 새 통 / 관리</Text>
-            </Pressable>
-          </View>
-        ) : null}
+    <View style={[styles.root, { backgroundColor: ui.sheet }]}>
+      <View style={[styles.top, { backgroundColor: ui.drawerArea, borderBottomColor: ui.line }]}>
+        <Drawer
+          width={contentW}
+          height={drawerH}
+          topInset={insets.top}
+          filled={items.length > 0}
+          pouring={pouring}
+          onPoured={() => router.push('/desk')}
+          onPress={pour}
+          bump={landedCount}
+          ui={ui}
+          paper={theme.paper.memo}
+        />
+        <Pressable onPress={pour} style={styles.pourBtn} hitSlop={8}>
+          <Text style={[styles.pourText, { color: ui.ink }]}>서랍 열어보기</Text>
+        </Pressable>
       </View>
 
-      <View style={[styles.bottom, { paddingBottom: insets.bottom }]} onLayout={(e) => setComposerBox(e.nativeEvent.layout)}>
-        <Composer
-          text={text}
-          onText={setText}
-          attachments={attachments}
-          onAttach={onAttach}
-          onRemove={(i) => setAttachments((a) => a.filter((_, j) => j !== i))}
-          onSubmit={submit}
-          ui={ui}
+      <View style={[styles.memos, { width: contentW, paddingBottom: insets.bottom }]}>
+        <View style={styles.header}>
+          <Text style={[styles.headerText, { color: ui.ink }]}>메모</Text>
+          <Pressable
+            onPress={() => setComposing((c) => !c)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={composing ? '작성 닫기' : '메모 쓰기'}
+          >
+            <Text style={[styles.plus, { color: ui.ink }]}>{composing ? '×' : '+'}</Text>
+          </Pressable>
+        </View>
+
+        {composing ? (
+          <View
+            ref={composerRef}
+            style={styles.composer}
+            onLayout={() => composerRef.current?.measureInWindow((x, y, w, h) => setComposerBox({ x: x + w / 2, y: y + h * 0.3 }))}
+          >
+            <Composer
+              text={text}
+              onText={setText}
+              attachments={attachments}
+              onAttach={onAttach}
+              onRemove={(i) => setAttachments((a) => a.filter((_, j) => j !== i))}
+              onSubmit={submit}
+              ui={ui}
+            />
+          </View>
+        ) : null}
+
+        <FlatList
+          data={shown}
+          keyExtractor={(i) => i.id}
+          contentContainerStyle={styles.list}
+          renderItem={({ item }) => <MemoCard item={item} onPress={() => setOpenId(item.id)} ui={ui} />}
+          ListEmptyComponent={<Text style={[styles.empty, { color: ui.inkSoft }]}>서랍이 비어 있어요. + 를 눌러 첫 메모를 넣어 보세요.</Text>}
         />
       </View>
 
@@ -130,17 +163,19 @@ export default function CollectScreen() {
         <FlyingPaper
           key={it.id}
           item={it}
-          from={{ x: width / 2, y: (composerBox?.y ?? height * 0.6) + (composerBox?.height ?? 300) * 0.3 }}
-          // 통은 binWrap 아래쪽(안내 문구 위)에 붙어 있다 → 통 입구 바로 아래로 떨어뜨린다
-          to={{ x: width / 2, y: binBox ? binBox.y + binBox.height - 40 - binH * 0.75 : binAreaH * 0.5 }}
+          from={composerBox ?? { x: width / 2, y: height * 0.6 }}
+          // 종이는 서랍 틈으로 빨려 들어간다
+          to={{ x: width / 2, y: slitY(insets.top) }}
           durationMs={theme.motion.throwMs}
           onDone={landed}
         />
       ))}
 
+      {openId ? <ItemDetail itemId={openId} onClose={() => setOpenId(null)} ui={ui} /> : null}
+
       {dragging ? (
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.drop]}>
-          <Text style={styles.dropText}>여기에 놓으면 통으로 들어가요</Text>
+          <Text style={styles.dropText}>여기에 놓으면 서랍으로 들어가요</Text>
         </View>
       ) : null}
     </View>
@@ -148,17 +183,19 @@ export default function CollectScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, overflow: 'hidden' },
-  top: { paddingHorizontal: 16 },
-  bar: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  binName: { paddingVertical: 6, paddingRight: 8 },
-  binText: { fontSize: 17, fontWeight: '700' },
-  barBtn: { paddingHorizontal: 10, paddingVertical: 6 },
-  binWrap: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingBottom: 14 },
-  binHint: { fontSize: 12 },
-  menu: { position: 'absolute', left: 12, minWidth: 180, borderRadius: 10, paddingVertical: 6, zIndex: 10, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12 },
-  menuItem: { paddingHorizontal: 14, paddingVertical: 10 },
-  bottom: { flex: 1 },
+  root: { flex: 1, overflow: 'hidden', alignItems: 'center' },
+  // 쏟아지는 종이가 메모 영역 위로 겹쳐 보이도록 위에 둔다
+  top: { alignSelf: 'stretch', alignItems: 'center', zIndex: 2, borderBottomWidth: StyleSheet.hairlineWidth },
+  pourBtn: { paddingTop: 14, paddingBottom: 16 },
+  pourText: { fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
+  // 서랍 아래 넉넉한 여백 자체가 서랍장과 작업 공간의 경계다
+  memos: { flex: 1, paddingTop: 28 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 10 },
+  headerText: { fontSize: 15, fontWeight: '700' },
+  plus: { fontSize: 24, lineHeight: 26, fontWeight: '300' },
+  composer: { height: 230, marginHorizontal: 16, marginBottom: 14 },
+  list: { paddingHorizontal: 16, paddingBottom: 24, gap: 10 },
+  empty: { textAlign: 'center', marginTop: 32, fontSize: 13 },
   drop: { backgroundColor: 'rgba(196,98,45,0.25)', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderStyle: 'dashed', borderColor: '#c4622d' },
   dropText: { fontSize: 20, fontWeight: '700', color: '#5a2a10' },
 });

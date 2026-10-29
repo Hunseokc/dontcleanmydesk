@@ -32,7 +32,8 @@ const afternoon: ThemeManifest = {
   quality: { low: { shadowBlur: false, leafBlur: false, bloom: true, stainScale: 0.5 } },
   ui: {
     background: '#e9c99b', ink: '#3a2414', inkSoft: '#7a5a40', panel: '#fbf3e4', accent: '#c4622d',
-    bin: '#a56b3c', binDark: '#6e4223',
+    drawerArea: '#cbc4ba', drawerFrame: '#b6aea3', drawerFront: '#dcd5ca', drawerSlit: '#3d3630',
+    sheet: '#f6f3ee', line: '#ddd6cb',
   },
 };
 
@@ -67,7 +68,11 @@ const night: ThemeManifest = {
     bloom: { color: '#ffb35c', intensity: 0.6, center: [0.5, 0.42], radius: 0.6 },
     vignette: { color: '#0b0712', strength: 0.92, dither: 0.8 },
   },
-  ui: { ...afternoon.ui, background: '#2c2230', ink: '#f3e6d2', inkSoft: '#b9a58e', panel: '#3a2e3c', bin: '#7c5132', binDark: '#4b2e1b' },
+  ui: {
+    ...afternoon.ui, background: '#2c2230', ink: '#f3e6d2', inkSoft: '#b9a58e', panel: '#3a2e3c',
+    drawerArea: '#3b3538', drawerFrame: '#2f2a2d', drawerFront: '#4a4347', drawerSlit: '#141113',
+    sheet: '#2a2429', line: '#433b41',
+  },
 };
 
 export const THEMES: Record<string, ThemeManifest> = { afternoon, morning, night };

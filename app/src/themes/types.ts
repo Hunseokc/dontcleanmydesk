@@ -56,5 +56,11 @@ export interface ThemeManifest {
   /** 저사양 기기용 품질 단계 */
   quality: { low: { shadowBlur: boolean; leafBlur: boolean; bloom: boolean; stainScale: number } };
   /** 첫 화면(Skia 없이 그리는 부분)에서 쓰는 색 */
-  ui: { background: string; ink: string; inkSoft: string; panel: string; accent: string; bin: string; binDark: string };
+  ui: {
+    background: string; ink: string; inkSoft: string; panel: string; accent: string;
+    /** 서랍 영역 바탕(따뜻한 회색)·서랍 테두리·무광 앞판·틈 안쪽 */
+    drawerArea: string; drawerFrame: string; drawerFront: string; drawerSlit: string;
+    /** 메모 영역 바탕(밝은 종이색)과 두 영역을 가르는 얇은 선 */
+    sheet: string; line: string;
+  };
 }
